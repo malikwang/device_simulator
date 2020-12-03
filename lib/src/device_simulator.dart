@@ -1,13 +1,13 @@
-import 'package:flutter/services.dart';
-import 'package:flutter/material.dart';
-
 import 'package:custom_navigator/custom_navigator.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import 'apple_icon.dart';
 import 'device_spec_list.dart';
+import 'device_specification.dart';
 import 'disabled.dart';
 import 'fake_android_status_bar.dart';
 import 'fake_ios_status_bar.dart';
-import 'apple_icon.dart';
 
 const double _kSettingsHeight = 72.0;
 final Color _kBackgroundColor = Colors.grey[900];
@@ -20,6 +20,8 @@ final _kTextStyle = TextStyle(
 );
 
 int _currentDevice = 0;
+double _defaultWidthPx = 375.0;
+double _defaultMaxWidthPx = 700.0;
 bool _screenshotMode = false;
 TargetPlatform _platform = TargetPlatform.iOS;
 
@@ -51,21 +53,42 @@ class DeviceSimulator extends StatefulWidget {
   /// The color of the top Android status bar (default is transparent black).
   final Color androidStatusBarBackgroundColor;
 
-  /// Creates a new [DeviceSimulator].
-  DeviceSimulator(
-      {@required this.child,
-      this.enable = true,
-      this.brightness = Brightness.light,
-      this.iOSMultitaskBarColor = Colors.grey,
-      this.androidShowNavigationBar = true,
-      this.androidStatusBarBackgroundColor = Colors.black26});
+  final Function(DeviceSpecification, double) onConfirm;
 
-  _DeviceSimulatorState createState() => _DeviceSimulatorState();
+  /// Creates a new [DeviceSimulator].
+  DeviceSimulator({
+    @required this.child,
+    this.enable = true,
+    this.brightness = Brightness.light,
+    this.iOSMultitaskBarColor = Colors.grey,
+    this.androidShowNavigationBar = true,
+    this.androidStatusBarBackgroundColor = Colors.black26,
+    this.onConfirm,
+  });
+
+  static DeviceSimulatorState of(BuildContext context) {
+    final scope = context.dependOnInheritedWidgetOfExactType<_DeviceSimulatorScope>();
+    return scope?.simulator;
+  }
+
+  DeviceSimulatorState createState() => DeviceSimulatorState();
 }
 
-class _DeviceSimulatorState extends State<DeviceSimulator> {
+class _DeviceSimulatorScope extends InheritedWidget {
+  _DeviceSimulatorScope({Key key, @required Widget child, @required this.simulator}) : super(key: key, child: child);
+
+  final DeviceSimulatorState simulator;
+
+  @override
+  bool updateShouldNotify(_DeviceSimulatorScope oldWidget) {
+    return simulator != oldWidget.simulator;
+  }
+}
+
+class DeviceSimulatorState extends State<DeviceSimulator> {
   Key _contentKey = UniqueKey();
   Key _navigatorKey = GlobalKey<NavigatorState>();
+  double currentWidthPx = 375.0;
 
   @override
   void initState() {
@@ -86,17 +109,14 @@ class _DeviceSimulatorState extends State<DeviceSimulator> {
         style: _kTextStyle,
       );
     }
-
     var specs = _platform == TargetPlatform.iOS ? iosSpecs : androidSpecs;
     var spec = specs[_currentDevice];
 
     Size simulatedSize = spec.size;
-    if (mq.orientation == Orientation.landscape)
-      simulatedSize = simulatedSize.flipped;
+    if (mq.orientation == Orientation.landscape) simulatedSize = simulatedSize.flipped;
 
     double navBarHeight = 0.0;
-    if (_platform == TargetPlatform.android && widget.androidShowNavigationBar)
-      navBarHeight = spec.navBarHeight;
+    if (_platform == TargetPlatform.android && widget.androidShowNavigationBar) navBarHeight = spec.navBarHeight;
 
     bool overflowWidth = false;
     bool overflowHeight = false;
@@ -108,16 +128,14 @@ class _DeviceSimulatorState extends State<DeviceSimulator> {
 
     double settingsHeight = _screenshotMode ? 0.0 : _kSettingsHeight;
     if (simulatedSize.height > mq.size.height - settingsHeight) {
-      simulatedSize =
-          Size(simulatedSize.width, mq.size.height - settingsHeight);
+      simulatedSize = Size(simulatedSize.width, mq.size.height - settingsHeight);
       overflowHeight = true;
     }
 
     double cornerRadius = _screenshotMode ? 0.0 : spec.cornerRadius;
 
     EdgeInsets padding = spec.padding;
-    if (mq.orientation == Orientation.landscape &&
-        spec.paddingLandscape != null) padding = spec.paddingLandscape;
+    if (mq.orientation == Orientation.landscape && spec.paddingLandscape != null) padding = spec.paddingLandscape;
 
     var content = MediaQuery(
       key: _contentKey,
@@ -224,13 +242,8 @@ class _DeviceSimulatorState extends State<DeviceSimulator> {
         clippedContent,
         notch,
         fakeStatusBar,
-        if (_platform == TargetPlatform.iOS &&
-            spec.cornerRadius > 0.0 &&
-            mq.size != simulatedSize)
-          fakeMultitaskBar,
-        if (widget.androidShowNavigationBar &&
-            _platform == TargetPlatform.android)
-          fakeNavigationBar,
+        if (_platform == TargetPlatform.iOS && spec.cornerRadius > 0.0 && mq.size != simulatedSize) fakeMultitaskBar,
+        if (widget.androidShowNavigationBar && _platform == TargetPlatform.android) fakeNavigationBar,
       ],
     );
 
@@ -240,8 +253,7 @@ class _DeviceSimulatorState extends State<DeviceSimulator> {
         children: <Widget>[
           Expanded(
             child: Align(
-              alignment:
-                  _screenshotMode ? Alignment(-1.0, -1.0) : Alignment(0.0, 0.0),
+              alignment: _screenshotMode ? Alignment(-1.0, -1.0) : Alignment(0.0, 0.0),
               child: Container(
                 width: simulatedSize.width,
                 height: simulatedSize.height,
@@ -251,21 +263,15 @@ class _DeviceSimulatorState extends State<DeviceSimulator> {
           ),
           if (!_screenshotMode)
             Container(
-              height: 72.0,
               color: Colors.black,
-              padding: EdgeInsets.only(
-                  left: 16.0 + mq.padding.left,
-                  right: 16.0 + mq.padding.right,
-                  bottom: mq.padding.bottom),
+              padding: EdgeInsets.only(left: 16.0 + mq.padding.left, right: 16.0 + mq.padding.right, bottom: mq.padding.bottom),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: <Widget>[
                   IconButton(
                     icon: Icon(
                       Icons.android,
-                      color: _platform == TargetPlatform.android
-                          ? Colors.white
-                          : Colors.white24,
+                      color: _platform == TargetPlatform.android ? Colors.white : Colors.white24,
                       size: 22.0,
                     ),
                     onPressed: () {
@@ -278,9 +284,7 @@ class _DeviceSimulatorState extends State<DeviceSimulator> {
                   IconButton(
                     icon: Icon(
                       IconApple.apple, // TODO: better image
-                      color: _platform == TargetPlatform.iOS
-                          ? Colors.white
-                          : Colors.white24,
+                      color: _platform == TargetPlatform.iOS ? Colors.white : Colors.white24,
                       size: 20.0,
                     ),
                     onPressed: () {
@@ -319,8 +323,7 @@ class _DeviceSimulatorState extends State<DeviceSimulator> {
                           children: <Widget>[
                             Text(
                               '${simulatedSize.width.round()} px',
-                              style: _kTextStyle.copyWith(
-                                  color: overflowWidth ? Colors.orange : null),
+                              style: _kTextStyle.copyWith(color: overflowWidth ? Colors.orange : null),
                             ),
                             Text(
                               ' • ',
@@ -328,8 +331,7 @@ class _DeviceSimulatorState extends State<DeviceSimulator> {
                             ),
                             Text(
                               '${simulatedSize.height.round()} px',
-                              style: _kTextStyle.copyWith(
-                                  color: overflowHeight ? Colors.orange : null),
+                              style: _kTextStyle.copyWith(color: overflowHeight ? Colors.orange : null),
                             ),
                           ],
                         ),
@@ -337,8 +339,7 @@ class _DeviceSimulatorState extends State<DeviceSimulator> {
                           padding: EdgeInsets.only(top: 4.0),
                           child: Text(
                             specs[_currentDevice].name,
-                            style: _kTextStyle.copyWith(
-                                color: Colors.white54, fontSize: 10.0),
+                            style: _kTextStyle.copyWith(color: Colors.white54, fontSize: 10.0),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             textAlign: TextAlign.start,
@@ -348,17 +349,79 @@ class _DeviceSimulatorState extends State<DeviceSimulator> {
                     ),
                   ),
                   Expanded(
-                    child: Slider(
-                      divisions: specs.length - 1,
-                      min: 0.0,
-                      max: (specs.length - 1).toDouble(),
-                      value: _currentDevice.toDouble(),
-                      label: specs[_currentDevice].name,
-                      onChanged: (double device) {
-                        setState(() {
-                          _currentDevice = device.round();
-                        });
-                      },
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    '设备类型:',
+                                    style: _kTextStyle.copyWith(color: overflowWidth ? Colors.orange : null),
+                                  ),
+                                  Expanded(
+                                    child: Slider(
+                                      divisions: specs.length - 1,
+                                      min: 0.0,
+                                      max: (specs.length - 1).toDouble(),
+                                      value: _currentDevice.toDouble(),
+                                      label: specs[_currentDevice].name,
+                                      onChanged: (double device) {
+                                        _currentDevice = device.round();
+                                        if (specs[_currentDevice].size.width > _defaultMaxWidthPx) {
+                                          currentWidthPx = _defaultMaxWidthPx;
+                                        } else {
+                                          currentWidthPx = _defaultWidthPx;
+                                        }
+                                        setState(() {});
+                                        rebuildAllChildren(context);
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Row(
+                                children: [
+                                  Text(
+                                    '模拟宽度:',
+                                    style: _kTextStyle,
+                                  ),
+                                  Expanded(
+                                    child: Slider(
+                                      divisions: 20,
+                                      min: 375.0,
+                                      max: simulatedSize.width > _defaultMaxWidthPx ? simulatedSize.width : _defaultMaxWidthPx,
+                                      value: currentWidthPx,
+                                      label: currentWidthPx.toString(),
+                                      onChanged: simulatedSize.width > _defaultMaxWidthPx
+                                          ? (double value) {
+                                              setState(() {
+                                                currentWidthPx = value;
+                                              });
+                                              rebuildAllChildren(context);
+                                            }
+                                          : null,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        FlatButton(
+                          onPressed: () {
+                            if (widget.onConfirm != null)
+                              widget.onConfirm(specs[_currentDevice], currentWidthPx);
+                          },
+                          color: Colors.blue,
+                          child: Text(
+                            '上传设置',
+                            style: _kTextStyle.copyWith(fontSize: 18),
+                          ),
+                        )
+                      ],
                     ),
                   ),
                 ],
@@ -368,21 +431,31 @@ class _DeviceSimulatorState extends State<DeviceSimulator> {
       ),
     );
 
-    return GestureDetector(
-      behavior: _screenshotMode
-          ? HitTestBehavior.opaque
-          : HitTestBehavior.deferToChild,
-      child: IgnorePointer(
-        ignoring: _screenshotMode,
-        child: screen,
+    return _DeviceSimulatorScope(
+      simulator: this,
+      child: GestureDetector(
+        behavior: _screenshotMode ? HitTestBehavior.opaque : HitTestBehavior.deferToChild,
+        child: IgnorePointer(
+          ignoring: _screenshotMode,
+          child: screen,
+        ),
+        onTap: _screenshotMode
+            ? () {
+                setState(() {
+                  _screenshotMode = false;
+                });
+              }
+            : null,
       ),
-      onTap: _screenshotMode
-          ? () {
-              setState(() {
-                _screenshotMode = false;
-              });
-            }
-          : null,
     );
+  }
+
+  void rebuildAllChildren(BuildContext context) {
+    void rebuild(Element el) {
+      el.markNeedsBuild();
+      el.visitChildren(rebuild);
+    }
+
+    (context as Element).visitChildren(rebuild);
   }
 }
